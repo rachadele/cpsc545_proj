@@ -65,13 +65,23 @@ def subsample_and_save(dataset_path, n_cells=1000):
     
 # Subsample x cells from each cell type if there are n>x cells present
 #ensures equal representation of cell types in reference
-def subsample_cells(data, filtered_ids, subsample=500):
+def subsample_cells(data, filtered_ids, subsample=500, relabel_path="/biof501_proj/meta/relabel/census_map_human.tsv"):
     # Filter data based on filtered_ids
     obs = data[data['soma_joinid'].isin(filtered_ids)]
-    celltypes = obs['cell_type'].unique()
+    relabel_df = pd.read_csv(relabel_path, sep='\t')  # Adjust the separator as needed
+    # Take the first column as the join key
+    join_key = relabel_df.columns[0]
+    # Ensure the join_key is in both the AnnData object and the relabel DataFrame
+    if join_key not in obs.columns:
+        raise ValueError(f"{join_key} not found in AnnData object observations.")
+    if join_key not in relabel_df.columns:
+        raise ValueError(f"{join_key} not found in relabel DataFrame.")
+    # Perform the left join to update the metadata
+    obs = obs.merge(relabel_df, on=join_key, how='left', suffixes=(None, "_y"))
+    celltypes = obs["rachel_subclass"].unique()
     final_idx = []
     for celltype in celltypes:
-        celltype_ids = obs[obs['cell_type'] == celltype]['soma_joinid'].values
+        celltype_ids = obs[obs['rachel_subclass'] == celltype]['soma_joinid'].values
         # Sample if there are enough observations, otherwise take all
         if len(celltype_ids) > subsample:
             subsampled_cell_idx = random.sample(list(celltype_ids), subsample)
@@ -103,7 +113,7 @@ def relabel(adata, relabel_path, join_key, sep="\t"):
 def extract_data(data, filtered_ids, subsample=10, organism=None, census=None, 
     obs_filter=None, cell_columns=None, dataset_info=None, dims=20, relabel_path="biof501_proj/meta/relabel/census_map_human.tsv'"):
     
-    brain_cell_subsampled_ids = subsample_cells(data, filtered_ids, subsample)
+    brain_cell_subsampled_ids = subsample_cells(data, filtered_ids, subsample, relabel_path=relabel_path)
     # Assuming get_seurat is defined to return an AnnData object
     adata = cellxgene_census.get_anndata(
         census=census,
@@ -705,6 +715,7 @@ def plot_roc_curves(metrics, title="ROC Curves for All Keys and Classes", save_p
     if save_path:
         plt.savefig(save_path, bbox_inches='tight')
         print(f"Plot saved to {save_path}")
+        plt.close()
     
     
 def combine_f1_scores(class_metrics, ref_keys):
@@ -746,29 +757,56 @@ def combine_f1_scores(class_metrics, ref_keys):
 
     return all_f1_scores
 
-def plot_label_f1_heatmaps(all_f1_scores, threshold, outpath):
+
+
+def plot_label_f1_heatmaps(all_f1_scores, threshold, outpath, widths=[1,0.8,0.5]):
     """
-    Plot heatmaps for label-level F1 scores for each query and save one figure per key.
-    
+    Plot horizontally stacked heatmaps for label-level F1 scores for each query across multiple keys with variable widths,
+    shared y-axis labels, a shared color bar, and a title for the query.
+
     Parameters:
         all_f1_scores (dict): Dictionary with keys as reference names and values as DataFrames containing F1 scores.
         threshold (float): Threshold value to display in plot titles.
         outpath (str): Directory to save the generated heatmaps.
+        widths (list of float): Proportional widths for subplots. If None, defaults to equal widths.
     """
     sns.set(style="whitegrid")
     os.makedirs(outpath, exist_ok=True)
 
+    # Determine global F1 score range
+    all_scores = pd.concat([df['f1_score'] for df in all_f1_scores.values()])
+    vmin, vmax = all_scores.min(), all_scores.max()
+
+    queries = set()
+    keys = list(all_f1_scores.keys())
     for key, df in all_f1_scores.items():
-        # Get the unique queries for this key
-        unique_queries = df['query'].unique()
-        cols = 3  # Max 3 columns per figure
-        rows = int(np.ceil(len(unique_queries) / cols))  # Determine rows based on queries
+        queries.update(df['query'].unique())
+    queries = sorted(queries)
 
-        # Create a new figure for this key
-        fig, axes = plt.subplots(nrows=rows, ncols=cols, figsize=(cols * 8, rows * 6))
-        axes = axes.flatten()  # Flatten for easy indexing
+    if widths is None:
+        widths = [1] * len(keys)  # Equal widths by default
 
-        for idx, query in enumerate(unique_queries):
+    for query in queries:
+        # Create a figure with variable subplot widths
+        fig, axes = plt.subplots(
+            nrows=1,
+            ncols=len(keys),
+            figsize=(sum(widths) * 10, 8),
+            gridspec_kw={'width_ratios': widths},
+            constrained_layout=True
+        )
+
+        # Add a figure title for the query
+        fig.suptitle(f'Class-level F1 for Query: {query}\nThreshold = {threshold:.2f}', fontsize=20, y=1.1)
+
+        if len(keys) == 1:
+            axes = [axes]  # Ensure axes is always iterable
+
+        for i, key in enumerate(keys):
+            if key not in all_f1_scores:
+                continue
+            
+            df = all_f1_scores[key]
             query_df = df[df['query'] == query]
 
             # Pivot DataFrame to create the heatmap
@@ -779,27 +817,33 @@ def plot_label_f1_heatmaps(all_f1_scores, threshold, outpath):
                 pivot_df,
                 annot=True,
                 cmap='YlOrRd',
-                cbar_kws={'label': 'F1 Score'},
+                cbar=i == len(keys) - 1,  # Add cbar only for the last subplot
+                cbar_kws={'label': 'F1 Score'} if i == len(keys) - 1 else None,
                 mask=mask,
-                ax=axes[idx],
-                linewidths=0,
-                annot_kws={"size": 6}
+                ax=axes[i],
+                linewidths=0.5,
+                annot_kws={"size": 8},
+                vmin=vmin,  # Use global vmin
+                vmax=vmax   # Use global vmax
             )
 
-            axes[idx].set_title(f'Query: {query}\nThreshold = {threshold:.2f}', fontsize=12)
-            axes[idx].set_ylabel('Reference', fontsize=10)
-            axes[idx].set_xlabel('Label', fontsize=10)
-            axes[idx].set_xticklabels(axes[idx].get_xticklabels(), rotation=90, fontsize=8)
-            axes[idx].set_yticklabels(axes[idx].get_yticklabels(), fontsize=8)
+            axes[i].set_title(f'{key}', fontsize=15)
+         #   axes[i].set_xlabel('Label', fontsize=12)
+            axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=90, fontsize=14)
 
-        # Remove any unused subplots
-        for ax in axes[len(unique_queries):]:
-            ax.remove()
+            # Only add y-axis labels to the leftmost subplot
+            if i == 0:
+                axes[i].set_ylabel('Reference', fontsize=10)
+                axes[i].set_yticklabels(axes[i].get_yticklabels(), fontsize=14)
+            else:
+                axes[i].set_ylabel("", fontsize=10)
+                axes[i].set_yticks([])  # Remove y-axis labels for other subplots
 
-        # Adjust layout and save the figure
-        plt.tight_layout()
-        plt.savefig(os.path.join(outpath, f'f1_heatmaps_{key}_threshold_{threshold:.2f}.png'))
+        # Save the figure
+        plt.savefig(os.path.join(outpath, f'f1_heatmaps_query_{query}_threshold_{threshold:.2f}.png'), bbox_inches='tight')
         plt.close()
+
+    
 
 
 def plot_aggregated_f1_heatmaps(all_f1_scores, threshold, outpath, ref_keys):
@@ -826,16 +870,17 @@ def plot_aggregated_f1_heatmaps(all_f1_scores, threshold, outpath, ref_keys):
     weighted_f1_data = final_f1_data[['reference', 'key', 'query', 'weighted_f1']]
 
     # Iterate through each level (key in ref_keys)
-    for level in ref_keys:
+    for query in weighted_f1_data["query"].unique():
         # Filter data for the current level
-        level_data = weighted_f1_data[weighted_f1_data['key'] == level]
+        level_data = weighted_f1_data[weighted_f1_data['query'] == query]
 
         # Pivot the data for the current level
         pivot_f1 = level_data.pivot_table(
             index='reference',
-            columns='query',
+            columns='key',
             values='weighted_f1'
         )
+        pivot_f1 = pivot_f1[ref_keys]
 
         # Plot the heatmap for the current level
         fig, ax = plt.subplots(figsize=(15, 10))
@@ -852,13 +897,13 @@ def plot_aggregated_f1_heatmaps(all_f1_scores, threshold, outpath, ref_keys):
         # Customize plot appearance
         ax.set_xticklabels(pivot_f1.columns, rotation=45, ha="right", fontsize=15)
         ax.set_yticklabels(pivot_f1.index, fontsize=15)
-        ax.set_title(f'Weighted F1 Score for Level: {level}\nThreshold = {threshold:.2f}', fontsize=20)
+        ax.set_title(f'Weighted F1 Score for Query: {query}\nThreshold = {threshold:.2f}', fontsize=20)
         ax.set_xlabel('Query', fontsize=15)
         ax.set_ylabel('Reference', fontsize=14)
 
         # Save the heatmap for the current level
         plt.tight_layout()
-        plt.savefig(os.path.join(outpath, f'weighted_f1_heatmap_level_{level}_threshold_{threshold:.2f}.png'))
+        plt.savefig(os.path.join(outpath, f'weighted_f1_heatmap_level_{query}_threshold_{threshold:.2f}.png'))
         plt.close()
 
 
@@ -880,7 +925,7 @@ def get_test_data(census_version, test_name, subsample=10,
     # Filter based on organism
     test_obs = brain_obs[brain_obs[split_key].isin([test_name])]
     filtered_ids = list(test_obs["soma_joinid"])
-    subsample_ids = random.sample(filtered_ids, subsample)#subsample_cells(brain_obs, filtered_ids, subsample=subsample)
+    subsample_ids = random.sample(filtered_ids, subsample)
     # Adjust organism naming for compatibility
     organism_name_mapping = {
         "homo_sapiens": "Homo sapiens",

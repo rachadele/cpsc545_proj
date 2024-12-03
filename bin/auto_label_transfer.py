@@ -72,8 +72,8 @@ model_file_path=setup(organism="homo_sapiens", version="2024-07-01")
 
 # when i make workflow, make this part of setup
 
-for file in full_paths:
-    subsample_and_save(file, n_cells=n_cells)
+#for file in full_paths:
+ #   subsample_and_save(file, n_cells=n_cells)
     
 #in workflow, use get_refs to separate this step
 # save as pickle instead of h5ad?
@@ -86,11 +86,11 @@ refs=adata_functions.get_census(organism="homo_sapiens",
 mapping_df = pd.read_csv(f"{projPath}meta/census_map_human.tsv", sep="\t")
 
 test_files=os.listdir(directory)
-subsample_paths = [os.path.join(directory, file) for file in test_files if f"{n_cells}" in file]
+subsample_paths = [os.path.join(directory, file) for file in test_files if f"subsampled_{n_cells}.h5ad" in file]
 
 queries = {}
 for file in subsample_paths:
-    query_name = os.path.basename(file).replace("_subsampled_" + str(n_cells)+".h5ad","")
+    query_name = os.path.basename(file).replace("_subsampled_" + str(n_cells) + ".h5ad","")
     relabel_path = os.path.join(projPath, "meta", query_name  + "_relabel.tsv")
     adata = ad.read_h5ad(file)
     sc.pp.calculate_qc_metrics(adata, inplace=True)
@@ -125,7 +125,7 @@ for query_name, query in queries.items():
                                                     query=query, key=ref_keys[0])
         new_query_name = query_name.replace(" ", "_").replace("/", "_")
         new_ref_name = ref_name.replace(" ", "_").replace("/", "_")
-        outdir=os.path.join(outpath,new_query_name, new_ref_name)
+        outdir=os.path.join(outpath,"roc",new_query_name, new_ref_name)
         os.makedirs(outdir, exist_ok=True)  # Create the directory if it doesn't exist
         plot_roc_curves(metrics=rocs[query_name][ref_name],
                        title=f"{query_name} vs {ref_name}",
@@ -156,11 +156,13 @@ for query_name, query in queries.items():
         new_ref_name = ref_name.replace(" ", "_").replace("/", "_") 
         os.makedirs(os.path.join(outpath,"meta",new_query_name, new_ref_name), exist_ok=True)  # Create the directory if it doesn't exist
         query.obs.to_csv(os.path.join(outpath,"meta",new_query_name, new_ref_name,"meta_transfer.tsv"),sep="\t")
-        
+       
+        plt.figure(figsize=(8, 10))  # Adjust the width and height as needed
+ 
         sc.pl.umap(
             query, 
-            color=["confidence"] + ["predicted_" + key for key in ref_keys] + [key for key in ref_keys] + ["cluster"], 
-            ncols=2, na_in_legend=True, legend_fontsize=20, 
+            color=["predicted_" + key for key in ref_keys] + ["cluster"], 
+            ncols=1, na_in_legend=True, legend_fontsize=20, 
             show=False  # Prevents immediate display, so we can save it with plt
         )
         outdir =os.path.join(outpath, "umaps",new_query_name,new_ref_name)
@@ -196,75 +198,75 @@ for query_name in queries:
                 new_ref_name = ref_name.replace(" ", "_").replace("/", "_") 
                 plot_confusion_matrix(query_name, ref_name, key,
                                       class_metrics[query_name][ref_name][key]["confusion"],
-                                      output_dir=os.path.join(outdir,'confusion',new_query_name,new_ref_name))
+                                      output_dir=os.path.join(outpath,'confusion',new_query_name,new_ref_name))
  
  
-# Save plots for each query and reference
-corr_dict = defaultdict(lambda: defaultdict(dict))
-for query_name, query in queries.items():
-    for key in ref_keys:
-        true_labels = query.obs[key]
-        class_proportions = pd.Series(true_labels).value_counts(normalize=True)    
-        corr_dict[key] = all_f1_scores[key].merge(
-            class_proportions.rename("proportion"), 
-            left_on="label", 
-            right_index=True
-        )
+## Save plots for each query and reference
+#corr_dict = defaultdict(lambda: defaultdict(dict))
+#for query_name, query in queries.items():
+    #for key in ref_keys:
+        #true_labels = query.obs[key]
+        #class_proportions = pd.Series(true_labels).value_counts(normalize=True)    
+        #corr_dict[key] = all_f1_scores[key].merge(
+            #class_proportions.rename("proportion"), 
+            #left_on="label", 
+            #right_index=True
+        #)
 
 # Initialize plot
-sns.set(style="whitegrid")
+#sns.set(style="whitegrid")
 
-# Loop through each DataFrame in corr_dict
-for key, df in corr_dict.items():
-    # Ensure that the necessary columns are available
-    if 'f1_score' in df.columns and 'proportion' in df.columns:
+## Loop through each DataFrame in corr_dict
+#for key, df in corr_dict.items():
+    ## Ensure that the necessary columns are available
+    #if 'f1_score' in df.columns and 'proportion' in df.columns:
         
-        # Get unique combinations of query and reference
-        unique_combos = df[['query', 'reference']].drop_duplicates()
+        ## Get unique combinations of query and reference
+        #unique_combos = df[['query', 'reference']].drop_duplicates()
 
-        for query, reference in unique_combos.values:
-            # Filter data for the current query-reference combo
-            query_ref_df = df[(df['query'] == query) & (df['reference'] == reference)]
-           # Calculate the correlation between F1-score and class proportion
-            correlation = query_ref_df[['f1_score', 'proportion']].corr().iloc[0, 1]
+        #for query, reference in unique_combos.values:
+            ## Filter data for the current query-reference combo
+            #query_ref_df = df[(df['query'] == query) & (df['reference'] == reference)]
+           ## Calculate the correlation between F1-score and class proportion
+            #correlation = query_ref_df[['f1_score', 'proportion']].corr().iloc[0, 1]
             
-            # Create a scatter plot with a regression line
-            plt.figure(figsize=(8, 6))
+            ## Create a scatter plot with a regression line
+            #plt.figure(figsize=(8, 6))
             
-            sns.regplot(
-                data=query_ref_df, 
-                x='proportion', 
-                y='f1_score', 
-                scatter_kws={'s': 50, 'color': 'blue'},  # Scatter plot style
-                line_kws={'color': 'red', 'lw': 2},  # Regression line style
-                ci=None  # Disable confidence intervals for the regression line
-            )
+            #sns.regplot(
+                #data=query_ref_df, 
+                #x='proportion', 
+                #y='f1_score', 
+                #scatter_kws={'s': 50, 'color': 'blue'},  # Scatter plot style
+                #line_kws={'color': 'red', 'lw': 2},  # Regression line style
+                #ci=None  # Disable confidence intervals for the regression line
+            #)
             
-            # Title with correlation coefficient
-            plt.title(f'Correlation between F1-score and Proportion\n{key} - Query: {query} - Reference: {reference}\nCorrelation: {correlation:.2f}', fontsize=14)
-            plt.xlabel('Class Proportion', fontsize=12)
-            plt.ylabel('F1 Score', fontsize=12)
+            ## Title with correlation coefficient
+            #plt.title(f'Correlation between F1-score and Proportion\n{key} - Query: {query} - Reference: {reference}\nCorrelation: {correlation:.2f}', fontsize=14)
+            #plt.xlabel('Class Proportion', fontsize=12)
+            #plt.ylabel('F1 Score', fontsize=12)
             
-            # Display or save the plot
-            plt.tight_layout()
-            outdir=os.path.join(outpath,"class_imbalance")
-            os.makedirs(outdir,exist_ok=True)
-            plt.savefig(os.path.join(outdir,f"{key}_{query}_{reference}_f1_vs_proportion_with_line.png"))
-            plt.show()
+            ## Display or save the plot
+            #plt.tight_layout()
+            #outdir=os.path.join(outpath,"class_imbalance")
+            #os.makedirs(outdir,exist_ok=True)
+            #plt.savefig(os.path.join(outdir,f"{key}_{query}_{reference}_f1_vs_proportion_with_line.png"))
+            #plt.show()
 
-for query_name, query in queries.items():
-    for key, df in all_f1_scores.items():
-        # Filter the DataFrame for the specific query
-        query_f1_scores = df[df["query"] == query_name]
+#for query_name, query in queries.items():
+    #for key, df in all_f1_scores.items():
+        ## Filter the DataFrame for the specific query
+        #query_f1_scores = df[df["query"] == query_name]
         
-        # Find the row with the maximum weighted F1 score
-        max_f1_row = query_f1_scores.loc[query_f1_scores['weighted_f1'].idxmax()]
+        ## Find the row with the maximum weighted F1 score
+        #max_f1_row = query_f1_scores.loc[query_f1_scores['weighted_f1'].idxmax()]
         
-        # Extract the reference (ref) at which the max F1 score occurs
-        max_f1_ref = max_f1_row['reference']
+        ## Extract the reference (ref) at which the max F1 score occurs
+        #max_f1_ref = max_f1_row['reference']
         
-        # Print the result
-        print(f"Reference with maximum weighted F1 score for {query_name} in {key}: {max_f1_ref} with F1 score {max_f1_row['weighted_f1']:.3f}")
+        ## Print the result
+        #print(f"Reference with maximum weighted F1 score for {query_name} in {key}: {max_f1_ref} with F1 score {max_f1_row['weighted_f1']:.3f}")
 
 query_name="velmeshev"
 ref_name="whole cortex"

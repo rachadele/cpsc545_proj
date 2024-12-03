@@ -1,0 +1,95 @@
+{
+    "GABAergic": {
+        "colname": "rachel_family",
+        "CGE": {
+            "colname": "rachel_class",
+            "LAMP5": {
+                "colname": "rachel_subclass"
+            },
+            "VIP": {
+                "colname": "rachel_subclass"
+            },
+            "SNCG": {
+                "colname": "rachel_subclass"
+            },
+            "CGE": {
+                "colname": "rachel_subclass"
+            }
+        },
+        "MGE": {
+            "colname": "rachel_class",
+            "PVALB": {
+                "colname": "rachel_subclass"
+            },
+            "SST": {
+                "colname": "rachel_subclass"
+            },
+            "Chandelier": {
+                "colname": "rachel_subclass"
+            }
+        }
+    },
+    "Glutamatergic": {
+        "colname": "rachel_family",
+        "L2/3-6 IT": {
+            "colname": "rachel_class",
+             "L2/3-6 IT": {
+            "colname": "rachel_subclass" 
+             }
+        },
+        "deep layer non-IT": {
+            "colname": "rachel_class",
+            "L5 ET": {
+                "colname": "rachel_subclass"
+            },
+            "L5/6 NP": {
+                "colname": "rachel_subclass"
+            },
+            "L6 CT": {
+                "colname": "rachel_subclass"
+            },
+            "L6b": {
+                "colname": "rachel_subclass"
+            }
+        }
+    },
+    "Non-neuron": {
+        "colname": "rachel_family",
+
+        "Oligodendrocyte lineage": {
+            "colname": "rachel_class",
+            "Oligodendrocyte": {
+                "colname": "rachel_subclass"
+            },
+            "OPC": {
+                "colname": "rachel_subclass"
+            }
+        },
+
+        "Microglia": {
+            "colname": "rachel_class",
+            "Microglia": {
+                "colname": "rachel_subclass"
+            }
+        },
+        "Astrocyte": {
+            "colname": "rachel_class",
+            "Astrocyte": {
+                "colname": "rachel_subclass"
+            }
+
+        },
+        "Vascular": {
+            "colname": "rachel_class",
+            "Pericyte": {
+                "colname": "rachel_subclass"
+            },
+            "VLMC": {
+                "colname": "rachel_subclass"
+            },
+            "Endothelial": {
+                "colname": "rachel_subclass"
+            }
+        }
+    }
+}
