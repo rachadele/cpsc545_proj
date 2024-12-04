@@ -6,6 +6,11 @@ library(dplyr)
 library(ggplot2)
 library(enrichR)
 
+
+regions = "PFC"
+n_cells = 10000
+cutHeight = 0.03
+
 # Define a custom theme with global font size settings and white background
 custom_theme <- theme_minimal() +
   theme(
@@ -33,7 +38,16 @@ par(
 )
 
 projPath="/space/grp/rschwartz/rschwartz/cpsc545_proj"
-outdir=file.path(projPath, "CSCORE_results")
+
+if (length(regions) == 1) {
+outdir=file.path(projPath, paste0("CSCORE_results/subsample_",n_cells),regions)
+} else {
+  # Combine the regions into a single string separated by underscores
+regions_combined <- paste(regions, collapse = "_")
+
+# Create the directory path using the combined region name
+outdir <- file.path(projPath, paste0("CSCORE_results/subsample_", n_cells), regions_combined)
+}
 # Create the directory if it doesn't already exist
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
@@ -43,9 +57,11 @@ if (!dir.exists(outdir)) {
 
 basedir="/space/grp/rschwartz/rschwartz/cpsc545_proj/mapped_queries/velmeshev/whole_cortex/subsample_10000"
 # File paths
-mtx_file <- file.path(basedir,"velmeshev_subsampled_10000_mapped.mtx")
-obs_file <- file.path(basedir,"velmeshev_subsampled_10000_obs_mapped.tsv")
-var_file <- file.path(basedir,"velmeshev_subsampled_10000_var_mapped.tsv")
+mtx_file <- file.path(basedir, paste("velmeshev_subsampled_", n_cells, "_mapped.mtx", sep = ""))
+obs_file <- file.path(basedir, paste("velmeshev_subsampled_", n_cells, "_obs_mapped.tsv", sep = ""))
+var_file <- file.path(basedir, paste("velmeshev_subsampled_", n_cells, "_var_mapped.tsv", sep = ""))
+  
+  #
 
 # Read the count matrix
 counts <- ReadMtx(mtx_file,cells=obs_file,features=var_file, skip.cell=1, skip.feature=1, feature.column=2)
@@ -67,6 +83,8 @@ ribosomal_genes <- grep("^RP|^RP", rownames(velmeshev), value = TRUE)
 mitochondrial_genes <- grep("^MT-", rownames(velmeshev), value = TRUE)
 genes_to_remove <- union(ribosomal_genes, mitochondrial_genes)
 velmeshev <- velmeshev[!rownames(velmeshev) %in% genes_to_remove, ]
+
+velmeshev <- velmeshev[,velmeshev$region %in% regions] 
 
 # Normalize
 velmeshev_IT = velmeshev[,velmeshev$predicted_rachel_class %in% 'L2/3-6 IT']
@@ -121,10 +139,10 @@ png(eigengene_tree_plot_path, width = 1000, height = 600)
 par(mar = c(0,4,2,0))
 par(cex = 0.6)
 plot(METree)
-abline(h=0.03, col = "red") 
+abline(h=cutHeight, col = "red") 
 dev.off()
 
-merge <- mergeCloseModules(exprData=expression.data, colors=ModuleColors, MEs=MEs, cutHeight = 0.03)
+merge <- mergeCloseModules(exprData=expression.data, colors=ModuleColors, MEs=MEs, cutHeight = cutHeight)
 mergedColors = merge$colors
 mergedMEs = merge$newMEs
 
@@ -168,10 +186,15 @@ png(heatmap_plot_path, width = 1000, height = 600)
 labeledHeatmap(Matrix = module.trait.correlation, xLabels = names(datTraits), yLabels = names(mergedMEs), ySymbols = names(mergedMEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1), main = paste("Module-trait relationships"))
 dev.off()
 
-
+if (length(regions) > 1) {
 traitData <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("sample","diagnosis","region","sex","individual","post.mortem.interval..hours.","age")) %>% 
+      dplyr::select(c("sample","diagnosis","sex","region","individual","post.mortem.interval..hours.","age")) %>% 
       distinct()
+} else {
+ traitData <- velmeshev_IT@meta.data %>% 
+      dplyr::select(c("sample","diagnosis","sex","individual","post.mortem.interval..hours.","age")) %>% #region excluded
+      distinct() 
+}
 #traitData$diagnosis <- ifelse(traitData$diagnosis == "Control", 0, 1)
 # Ensure both vectors are character vectors
 Samples <- as.character(rownames(expression.data))
@@ -238,7 +261,9 @@ library(org.Hs.eg.db)
 library(biomaRt)# Replace with the appropriate organism db
 
 # Connect to the Ensembl database for human gene information
-ensembl = useMart("ensembl", dataset = "hsapiens_gene_ensembl", host = "useast.ensembl.org")
+ensembl <- useMart("ensembl", 
+                   dataset = "hsapiens_gene_ensembl", 
+                   host = "https://useast.ensembl.org")
 
 # Map HGNC symbols to Entrez IDs
 gene_entrez_mapping <- getBM(

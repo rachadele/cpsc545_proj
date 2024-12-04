@@ -844,16 +844,14 @@ def plot_label_f1_heatmaps(all_f1_scores, threshold, outpath, widths=[1,0.8,0.5]
         plt.close()
 
     
-
-
 def plot_aggregated_f1_heatmaps(all_f1_scores, threshold, outpath, ref_keys):
     """
-    Plot heatmaps for weighted F1 scores, with one heatmap per level (key in ref_keys).
-    
+    Plot all F1 heatmaps on the same figure with the color bar in the middle plot and a higher title.
+
     Parameters:
         all_f1_scores (dict): Dictionary with keys as reference names and values as DataFrames containing F1 scores.
         threshold (float): Threshold value to display in plot titles.
-        outpath (str): Directory to save the generated heatmaps.
+        outpath (str): Directory to save the combined heatmap.
         ref_keys (list): List of reference keys to ensure consistent ordering across levels.
     """
     sns.set(style="whitegrid")
@@ -869,8 +867,28 @@ def plot_aggregated_f1_heatmaps(all_f1_scores, threshold, outpath, ref_keys):
     # Filter for weighted F1 data
     weighted_f1_data = final_f1_data[['reference', 'key', 'query', 'weighted_f1']]
 
-    # Iterate through each level (key in ref_keys)
-    for query in weighted_f1_data["query"].unique():
+    # Get unique queries
+    unique_queries = weighted_f1_data["query"].unique()
+    n_queries = len(unique_queries)
+
+    # Create subplots
+    fig, axes = plt.subplots(
+        n_queries, 1,
+        figsize=(15, 5 * n_queries),
+        constrained_layout=True,
+        sharex=True
+    )
+
+    # Ensure axes is always a list for consistent indexing
+    if n_queries == 1:
+        axes = [axes]
+
+    # Define the color map limits
+    vmin = weighted_f1_data['weighted_f1'].min()
+    vmax = weighted_f1_data['weighted_f1'].max()
+
+    # Plot each heatmap
+    for i, (ax, query) in enumerate(zip(axes, unique_queries)):
         # Filter data for the current level
         level_data = weighted_f1_data[weighted_f1_data['query'] == query]
 
@@ -882,31 +900,43 @@ def plot_aggregated_f1_heatmaps(all_f1_scores, threshold, outpath, ref_keys):
         )
         pivot_f1 = pivot_f1[ref_keys]
 
-        # Plot the heatmap for the current level
-        fig, ax = plt.subplots(figsize=(15, 10))
+        # Add color bar only for the middle plot
+        add_cbar = (i == len(axes) // 2)
+
         sns.heatmap(
             pivot_f1,
             annot=True,
             cmap='YlOrRd',
-            cbar_kws={'label': 'Weighted F1 Score'},
+            cbar=add_cbar,
+            cbar_kws={'label': 'Weighted F1 Score'} if add_cbar else None,
             fmt='.3f',
             annot_kws={"size": 10},
-            ax=ax
+            ax=ax,
+            vmin=vmin,
+            vmax=vmax
         )
 
-        # Customize plot appearance
-        ax.set_xticklabels(pivot_f1.columns, rotation=45, ha="right", fontsize=15)
-        ax.set_yticklabels(pivot_f1.index, fontsize=15)
-        ax.set_title(f'Weighted F1 Score for Query: {query}\nThreshold = {threshold:.2f}', fontsize=20)
-        ax.set_xlabel('Query', fontsize=15)
-        ax.set_ylabel('Reference', fontsize=14)
+        # Customize subplot
+        ax.set_title(f'Query: {query}', fontsize=18)
+        ax.set_ylabel('Reference', fontsize=15)
 
-        # Save the heatmap for the current level
-        plt.tight_layout()
-        plt.savefig(os.path.join(outpath, f'weighted_f1_heatmap_level_{query}_threshold_{threshold:.2f}.png'))
-        plt.close()
+        # Remove x-axis labels for all but the last subplot
+        if ax != axes[-1]:
+            ax.set_xlabel(None)
 
+    # Set x-axis label only on the bottom heatmap
+    axes[-1].set_xlabel('Query', fontsize=15)
 
+    # Adjust layout and add a higher title
+    fig.subplots_adjust(top=1.0)  # Increase space at the top
+    fig.suptitle(
+        f'Weighted F1 Scores Across Levels\nThreshold = {threshold:.2f}',
+        fontsize=24, y=1.5
+    )
+
+    # Save the plot
+    plt.savefig(os.path.join(outpath, f'combined_weighted_f1_heatmaps_threshold_{threshold:.2f}.png'))
+    plt.close()
         
 def get_test_data(census_version, test_name, subsample=10, 
                   organism="homo_sapiens", 
