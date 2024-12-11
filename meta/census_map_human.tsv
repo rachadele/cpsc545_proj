@@ -1,0 +1,23 @@
+cell_type	rachel_subclass	rachel_class	rachel_family
+lamp5 GABAergic cortical interneuron	LAMP5	CGE	GABAergic
+vip GABAergic cortical interneuron	VIP	CGE	GABAergic
+sncg GABAergic cortical interneuron	SNCG	CGE	GABAergic
+caudal ganglionic eminence derived GABAergic cortical interneuron	CGE	CGE	GABAergic
+pvalb GABAergic cortical interneuron	PVALB	MGE	GABAergic
+sst GABAergic cortical interneuron	SST	MGE	GABAergic
+chandelier pvalb GABAergic cortical interneuron	Chandelier	MGE	GABAergic
+L2/3-6 intratelencephalic projecting glutamatergic neuron	L2/3-6 IT	L2/3-6 IT	Glutamatergic
+L5 extratelencephalic projecting glutamatergic cortical neuron	L5 ET	deep layer non-IT	Glutamatergic
+near-projecting glutamatergic cortical neuron	L5/6 NP	deep layer non-IT	Glutamatergic
+corticothalamic-projecting glutamatergic cortical neuron	L6 CT	deep layer non-IT	Glutamatergic
+L6 corticothalamic-projecting glutamatergic cortical neuron	L6 CT	deep layer non-IT	Glutamatergic
+L6b glutamatergic cortical neuron	L6b	deep layer non-IT	Glutamatergic
+oligodendrocyte	Oligodendrocyte	Oligodendrocyte lineage	Non-neuron
+oligodendrocyte precursor cell	OPC	Oligodendrocyte lineage	Non-neuron
+astrocyte	Astrocyte	Astrocyte	Non-neuron
+astrocyte of the cerebral cortex	Astrocyte	Astrocyte	Non-neuron
+microglial cell	Microglia	Microglia	Non-neuron
+vascular leptomeningeal cell	VLMC	Vascular	Non-neuron
+pericyte	Pericyte	Vascular	Non-neuron
+cerebral cortex endothelial cell	Endothelial	Vascular	Non-neuron
+endothelial cell	Endothelial	Vascular	Non-neuron

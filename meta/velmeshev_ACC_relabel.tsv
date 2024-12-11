@@ -1,0 +1,18 @@
+cluster	rachel_subclass	rachel_class	rachel_family
+AST-FB	Astrocyte	Astrocyte	Non-neuron
+AST-PP	Astrocyte	Astrocyte	Non-neuron
+Endothelial	Endothelial	Vascular	Non-neuron
+IN-PV	PVALB	MGE	GABAergic
+IN-SST	SST	MGE	GABAergic
+IN-SV2C	LAMP5	CGE	GABAergic
+IN-VIP	VIP	CGE	GABAergic
+L2/3	L2/3-6 IT	L2/3-6 IT	Glutamatergic
+L4	L2/3-6 IT	L2/3-6 IT	Glutamatergic
+L5/6	L5/6 NP	deep layer non-IT	Glutamatergic
+L5/6-CC	L2/3-6 IT	L2/3-6 IT	Glutamatergic
+Microglia	Microglia	Microglia	Non-neuron
+Neu-mat	Glutamatergic	Glutamatergic	Glutamatergic
+Neu-NRGN-I	Glutamatergic	Glutamatergic	Glutamatergic
+Neu-NRGN-II	Glutamatergic	Glutamatergic	Glutamatergic
+Oligodendrocytes	Oligodendrocyte	Oligodendrocyte lineage	Non-neuron
+OPC	OPC	Oligodendrocyte lineage	Non-neuron

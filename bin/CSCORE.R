@@ -5,11 +5,11 @@ library(flashClust)
 library(dplyr)
 library(ggplot2)
 library(enrichR)
+library(VennDiagram)
 
-
-regions = "PFC"
-n_cells = 10000
-cutHeight = 0.03
+regions = "ACC" 
+n_cells = 10000 
+cutHeight = 0.75
 
 # Define a custom theme with global font size settings and white background
 custom_theme <- theme_minimal() +
@@ -55,7 +55,7 @@ if (!dir.exists(outdir)) {
 
 
 
-basedir="/space/grp/rschwartz/rschwartz/cpsc545_proj/mapped_queries/velmeshev/whole_cortex/subsample_10000"
+basedir=paste0("/space/grp/rschwartz/rschwartz/cpsc545_proj/mapped_queries/velmeshev/whole_cortex/subsample_",n_cells)
 # File paths
 mtx_file <- file.path(basedir, paste("velmeshev_subsampled_", n_cells, "_mapped.mtx", sep = ""))
 obs_file <- file.path(basedir, paste("velmeshev_subsampled_", n_cells, "_obs_mapped.tsv", sep = ""))
@@ -113,38 +113,66 @@ dissTOM = 1-TOM
 rownames(dissTOM) <- colnames(dissTOM) <- genes_selected
 
 geneTree = hclust(as.dist(dissTOM), method = "average") 
-Modules = dynamicTreeCut::cutreeDynamic(dendro = geneTree, distM = dissTOM, deepSplit = 4, pamRespectsDendro = FALSE, minClusterSize = 10)
+Modules = dynamicTreeCut::cutreeDynamic(dendro = geneTree, distM = dissTOM, deepSplit = 2,
+pamRespectsDendro = FALSE, minClusterSize = 10)
 ModuleColors <- labels2colors(Modules)
 
 # Save the dendrogram plot
 dendro_plot_path <- file.path(outdir, "gene_dendrogram_and_module_colors.png")
 png(dendro_plot_path, width = 1000, height = 600)
-plotDendroAndColors(geneTree, ModuleColors, "Module", dendroLabels = FALSE, hang = 0.03, addGuide = TRUE, guideHang = 0.05, main = "Gene dendrogram and module colors")
+plotDendroAndColors(geneTree, ModuleColors, "Module", dendroLabels = FALSE, 
+hang = 0.03, addGuide = TRUE, guideHang = 0.05, main = "Gene dendrogram and module colors")
 dev.off()
+
+module_genes <- split(genes_selected, ModuleColors)  # Split genes by module
+# Create the data frame with module counts
+module_counts <- data.frame(
+  Module = names(module_genes),
+  Count = unlist(lapply(module_genes, length))
+)
+filename <- file.path(outdir, "genes_across_modules.tsv")
+# Write the table to a TSV file
+write.table(module_counts, file = filename, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+
 
 # Aggregate expression by sample
 seurat_subset <- subset(velmeshev_IT, features = genes_selected)
-pseudobulk <- AggregateExpression(object = seurat_subset, group.by = "sample", assays = "RNA", slot = "counts", return.seurat = TRUE)
-expression.data = t(as.matrix(pseudobulk$RNA$counts))
-rownames(expression.data) <- sub("^g", "", rownames(expression.data))
+#pseudobulk <- AggregateExpression(object = seurat_subset, group.by = "sample", assays = "RNA", slot = "counts", return.seurat = TRUE)
 
-MElist <- moduleEigengenes(expression.data, colors = ModuleColors)
+#expression.data = t(as.matrix(pseudobulk$RNA$data))
+#rownames(expression.data) <- sub("^g", "", rownames(expression.data))
+seurat_subset <- seurat_subset %>% NormalizeData()
+expression.data = t(as.matrix(seurat_subset@assays$RNA$data))
+
+MElist <- moduleEigengenes(expression.data, colors = ModuleColors, impute=FALSE)
 MEs <- MElist$eigengenes 
 ME.dissimilarity = 1-cor(MElist$eigengenes, use="complete")
 METree = hclust(as.dist(ME.dissimilarity), method = "average")
-
 # Save the eigengene tree plot
 eigengene_tree_plot_path <- file.path(outdir, "eigengene_tree.png")
 png(eigengene_tree_plot_path, width = 1000, height = 600)
 par(mar = c(0,4,2,0))
 par(cex = 0.6)
 plot(METree)
+
 abline(h=cutHeight, col = "red") 
 dev.off()
 
-merge <- mergeCloseModules(exprData=expression.data, colors=ModuleColors, MEs=MEs, cutHeight = cutHeight)
+
+merge <- mergeCloseModules(exprData=expression.data, colors=ModuleColors, MEs=MEs, cutHeight = cutHeight, impute=FALSE, equalizeQuantiles	
+=FALSE)
 mergedColors = merge$colors
 mergedMEs = merge$newMEs
+
+merged_module_genes <- split(genes_selected, mergedColors)  # Split genes by module
+# Create the data frame with module counts
+merged_module_counts <- data.frame(
+  Module = names(merged_module_genes),
+  Count = unlist(lapply(merged_module_genes, length))
+)
+filename <- file.path(outdir, paste0("merged_genes_across_modules_",cutHeight,".tsv"))
+write.table(merged_module_counts, file = filename, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # Save the merged modules dendrogram plot
 merged_modules_plot_path <- file.path(outdir, "gene_dendrogram_and_merged_modules.png")
@@ -153,30 +181,15 @@ plotDendroAndColors(geneTree, cbind(ModuleColors, mergedColors), c("Original Mod
 addGuide = TRUE, guideHang = 0.05, main = "Gene dendrogram and module colors for original and merged modules")
 dev.off()
 
-library(dplyr)
-traitData <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("sample","diagnosis","post.mortem.interval..hours.","age")) %>% 
-      distinct()
-traitData$diagnosis <- ifelse(traitData$diagnosis == "Control", 0, 1)
-# Ensure both vectors are character vectors
-Samples <- as.character(rownames(expression.data))
-traitData$sample <- as.character(traitData$sample)
-traitData$sample <- gsub("_", "-", traitData$sample)
-# Match samples
-traitRows <- match(Samples, traitData$sample)
-datTraits <- traitData[traitRows, -1]
-rownames(datTraits) <- traitData[traitRows, 1]
+datTraits <- velmeshev_IT@meta.data %>% 
+      dplyr::select(c("diagnosis","post.mortem.interval..hours.","age"))
 
+datTraits$diagnosis <- ifelse(datTraits$diagnosis == "Control", 0, 1)
 # Define numbers of genes and samples
 nGenes = ncol(expression.data)
 nSamples = nrow(expression.data)
 module.trait.correlation = cor(mergedMEs, datTraits, use = "p") #p for pearson correlation coefficient 
 module.trait.Pvalue = corPvalueStudent(module.trait.correlation, nSamples) #calculate the p-value associated with the correlation
-
-
-# Module-trait relationships heatmap
-module.trait.correlation = cor(mergedMEs, datTraits, use = "p")
-module.trait.Pvalue = corPvalueStudent(module.trait.correlation, nSamples)
 textMatrix = paste(signif(module.trait.correlation, 2), "\n(", signif(module.trait.Pvalue, 1), ")", sep = "")
 dim(textMatrix) = dim(module.trait.correlation)
 
@@ -186,29 +199,19 @@ png(heatmap_plot_path, width = 1000, height = 600)
 labeledHeatmap(Matrix = module.trait.correlation, xLabels = names(datTraits), yLabels = names(mergedMEs), ySymbols = names(mergedMEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1), main = paste("Module-trait relationships"))
 dev.off()
 
+
 if (length(regions) > 1) {
 traitData <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("sample","diagnosis","sex","region","individual","post.mortem.interval..hours.","age")) %>% 
-      distinct()
+      dplyr::select(c("diagnosis","sex","individual","region","post.mortem.interval..hours.","age"))
 } else {
- traitData <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("sample","diagnosis","sex","individual","post.mortem.interval..hours.","age")) %>% #region excluded
-      distinct() 
+  traitData <- velmeshev_IT@meta.data %>% 
+      dplyr::select(c("diagnosis","sex","individual","post.mortem.interval..hours.","age"))
 }
-#traitData$diagnosis <- ifelse(traitData$diagnosis == "Control", 0, 1)
-# Ensure both vectors are character vectors
-Samples <- as.character(rownames(expression.data))
-traitData$sample <- as.character(traitData$sample)
-traitData$sample <- gsub("_", "-", traitData$sample)
-# Match samples
-traitRows <- match(Samples, traitData$sample)
-datTraits <- traitData[traitRows, -1]
-rownames(datTraits) <- traitData[traitRows, 1]
 
 # Iterate over each module eigengene and perform ANOVA
 anova_results <- lapply(colnames(mergedMEs), function(module) {
   module_eigengene <- mergedMEs[, module]
-  aov_result <- aov(module_eigengene ~ ., data=datTraits)
+  aov_result <- aov(module_eigengene ~ ., data=traitData)
   summary(aov_result)
 })
 
@@ -227,31 +230,32 @@ colnames(anova_summary) <- c("SumSq", "Df", "MeanSq", "FValue", "PValue", "Predi
 anova_summary[] <- lapply(anova_summary, function(x) if (is.character(x)) trimws(x) else x)
 # Remove rows where Predictor is exactly "Residuals"
 anova_summary <- anova_summary[!grepl("^Residuals$", anova_summary$Predictor), ]
-anova_summary$SignificanceLabel <- ifelse(anova_summary$PValue <= 0.05, "Significant", "Not Significant")
+anova_summary$FDR <- p.adjust(anova_summary$PValue, method = "fdr") 
+anova_summary$SignificanceLabel <- ifelse(anova_summary$FDR < 0.05, "FDR < 0.05", "FDR > 0.05")
+anova_summary$NegLogPValue <- -log10(anova_summary$FDR)
+anova_plot_path <- file.path(outdir, "anova_significance_plot.png")
+
 
 # Save the ANOVA F-values plot
-anova_plot_path <- file.path(outdir, "anova_Fvalues_plot.png")
-# Save the ANOVA plot to the specified output directory
-anova_plot <- ggplot(anova_summary, aes(x = Predictor, y = FValue, fill = Module, color = SignificanceLabel)) +
-  geom_bar(stat = "identity", position = "dodge", color = "black") +
+anova_plot <- ggplot(anova_summary, aes(x = Predictor, y = NegLogPValue, fill = Module)) +
   geom_bar(
     stat = "identity",
-    position = "dodge",
+    position = position_dodge(width = 0.8),
     aes(color = SignificanceLabel),
-    size = 1.2,
-    show.legend = TRUE
+    size = 1.2
   ) +
   coord_flip() +
   labs(
     title = "ANOVA for WGCNA Module Eigengenes by Predictor",
     x = "Predictor",
-    y = "F-value",
+    y = "-log10(p-value)",
     fill = "Module",
     color = "Significance"
   ) +
-  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "transparent")) +
+  scale_color_manual(values = c("FDR < 0.05" = "red", "FDR > 0.05" = "transparent")) +
   custom_theme +
   theme(legend.position = "right")
+
 
 # Save the plot using ggsave
 ggsave(anova_plot_path, plot = anova_plot, width = 20, height = 8)
@@ -277,9 +281,12 @@ gene_entrez_mapping <- getBM(
 gene_entrez_ids <- merge(data.frame(SYMBOL = genes_selected), gene_entrez_mapping, by.x = "SYMBOL", by.y = "hgnc_symbol")
 
 merged_module_genes <- split(genes_selected, mergedColors)  # Split genes by module
+
+sig_modules= anova_summary %>% filter(Predictor == "diagnosis" & FDR < 0.05)
+sig_modules$Module <- gsub("ME","",sig_modules$Module)
 go_results <- list()
 # Iterate over each module in your list of modules
-for (module in names(merged_module_genes)) {
+for (module in sig_modules$Module) {
 # Select the genes for the current module
     module_genes <- merged_module_genes[[module]]
     
@@ -309,7 +316,7 @@ for (module in names(merged_module_genes)) {
         tryCatch({
             dotplot(go_enrichment) + ggtitle(paste("GO Enrichment for Module", module))
             # Optionally save the plot
-            ggsave(paste("GO_enrichment_module_", module, ".png", sep=""), height=8)
+            ggsave(file.path(outdir,paste0("GO_enrichment_module_", module, ".png")), width=15, height=8)
         }, error = function(e) {
             message(paste("Plotting failed for module", module, ": ", e$message))
         })

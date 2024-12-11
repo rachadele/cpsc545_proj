@@ -163,6 +163,11 @@ cython_debug/
 #
 *h5ad
 *rds
-*tsv
+mapped_queries/* #*tsv
+Rplots.pdf
+TOM/
+mapped_queries/
+results_subsample_1000/meta/
+results_subsample_10000/meta/
 *csv
 scvi-human-2024-07-01
