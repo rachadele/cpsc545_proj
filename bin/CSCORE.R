@@ -7,7 +7,7 @@ library(ggplot2)
 library(enrichR)
 library(VennDiagram)
 
-regions = "ACC" 
+regions = c("PFC","ACC") 
 n_cells = 10000 
 cutHeight = 0.75
 
