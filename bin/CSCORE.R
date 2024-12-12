@@ -10,7 +10,8 @@ library(VennDiagram)
 regions = c("PFC","ACC") 
 n_cells = 10000 
 cutHeight = 0.75
-
+deepSplit = 2
+ngenes =20000
 # Define a custom theme with global font size settings and white background
 custom_theme <- theme_minimal() +
   theme(
@@ -89,7 +90,7 @@ velmeshev <- velmeshev[,velmeshev$region %in% regions]
 # Normalize
 velmeshev_IT = velmeshev[,velmeshev$predicted_rachel_class %in% 'L2/3-6 IT']
 mean_exp = rowMeans(velmeshev_IT@assays$RNA$counts/velmeshev_IT$nCount_RNA)
-genes_selected = names(sort.int(mean_exp, decreasing = T))[1:20000]
+genes_selected = names(sort.int(mean_exp, decreasing = T))[1:ngenes]
 
 CSCORE_result <- CSCORE(velmeshev_IT, genes = genes_selected)
 CSCORE_coexp <- CSCORE_result$est
@@ -113,7 +114,7 @@ dissTOM = 1-TOM
 rownames(dissTOM) <- colnames(dissTOM) <- genes_selected
 
 geneTree = hclust(as.dist(dissTOM), method = "average") 
-Modules = dynamicTreeCut::cutreeDynamic(dendro = geneTree, distM = dissTOM, deepSplit = 2,
+Modules = dynamicTreeCut::cutreeDynamic(dendro = geneTree, distM = dissTOM, deepSplit = deepSplit,
 pamRespectsDendro = FALSE, minClusterSize = 10)
 ModuleColors <- labels2colors(Modules)
 
