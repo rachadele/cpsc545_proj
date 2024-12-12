@@ -6,10 +6,14 @@ library(dplyr)
 library(ggplot2)
 library(enrichR)
 library(VennDiagram)
+library(DESeq2)
+library(dplyr)
 
 regions = c("PFC","ACC") 
 n_cells = 10000 
-cutHeight = 0.75
+cutHeight = 0.2
+ngenes = 20000
+deepSplit=2
 
 # Define a custom theme with global font size settings and white background
 custom_theme <- theme_minimal() +
@@ -89,7 +93,7 @@ velmeshev <- velmeshev[,velmeshev$region %in% regions]
 # Normalize
 velmeshev_IT = velmeshev[,velmeshev$predicted_rachel_class %in% 'L2/3-6 IT']
 mean_exp = rowMeans(velmeshev_IT@assays$RNA$counts/velmeshev_IT$nCount_RNA)
-genes_selected = names(sort.int(mean_exp, decreasing = T))[1:20000]
+genes_selected = names(sort.int(mean_exp, decreasing = T))[1:ngenes]
 
 CSCORE_result <- CSCORE(velmeshev_IT, genes = genes_selected)
 CSCORE_coexp <- CSCORE_result$est
@@ -113,7 +117,7 @@ dissTOM = 1-TOM
 rownames(dissTOM) <- colnames(dissTOM) <- genes_selected
 
 geneTree = hclust(as.dist(dissTOM), method = "average") 
-Modules = dynamicTreeCut::cutreeDynamic(dendro = geneTree, distM = dissTOM, deepSplit = 2,
+Modules = dynamicTreeCut::cutreeDynamic(dendro = geneTree, distM = dissTOM, deepSplit = deepSplit,
 pamRespectsDendro = FALSE, minClusterSize = 10)
 ModuleColors <- labels2colors(Modules)
 
@@ -136,14 +140,38 @@ write.table(module_counts, file = filename, sep = "\t", row.names = FALSE, col.n
 
 
 
+
 # Aggregate expression by sample
 seurat_subset <- subset(velmeshev_IT, features = genes_selected)
-#pseudobulk <- AggregateExpression(object = seurat_subset, group.by = "sample", assays = "RNA", slot = "counts", return.seurat = TRUE)
+pseudobulk <- AggregateExpression(object = seurat_subset, group.by = "sample", assays = "RNA", slot = "counts", return.seurat = TRUE)
 
-#expression.data = t(as.matrix(pseudobulk$RNA$data))
+meta <- seurat_subset@meta.data %>% 
+    dplyr::select(c("diagnosis","sex","individual","region","post.mortem.interval..hours.","age","sample")) %>% 
+    distinct()
+meta$sample <- gsub("_","-", meta$sample)
+
+pseudobulk$sample <- sub("^g", "", pseudobulk$sample) 
+
+pseudobulk@meta.data <- left_join(pseudobulk@meta.data, meta, by="sample")
+
+# Create the DESeq2 object
+dds <- DESeqDataSetFromMatrix(countData = pseudobulk@assays$RNA$counts, 
+                              colData = pseudobulk@meta.data, 
+                              design = ~ 1)
+
+# Perform variance stabilization normalization
+vsd <- vst(dds)
+
+# Access the normalized data
+normalized_data <- assay(vsd)
+
+expression.data <- normalized_data %>% t()
+
+#expression.data = t(as.matrix(pseudobulk$RNA$counts))
 #rownames(expression.data) <- sub("^g", "", rownames(expression.data))
-seurat_subset <- seurat_subset %>% NormalizeData()
-expression.data = t(as.matrix(seurat_subset@assays$RNA$data))
+
+#seurat_subset <- seurat_subset %>% NormalizeData()
+#expression.data = t(as.matrix(seurat_subset@assays$RNA$data))
 
 MElist <- moduleEigengenes(expression.data, colors = ModuleColors, impute=FALSE)
 MEs <- MElist$eigengenes 
@@ -181,31 +209,31 @@ plotDendroAndColors(geneTree, cbind(ModuleColors, mergedColors), c("Original Mod
 addGuide = TRUE, guideHang = 0.05, main = "Gene dendrogram and module colors for original and merged modules")
 dev.off()
 
-datTraits <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("diagnosis","post.mortem.interval..hours.","age"))
+#datTraits <- velmeshev_IT@meta.data %>% 
+     # dplyr::select(c("diagnosis","post.mortem.interval..hours.","age"))
 
-datTraits$diagnosis <- ifelse(datTraits$diagnosis == "Control", 0, 1)
+#datTraits$diagnosis <- ifelse(datTraits$diagnosis == "Control", 0, 1)
 # Define numbers of genes and samples
-nGenes = ncol(expression.data)
-nSamples = nrow(expression.data)
-module.trait.correlation = cor(mergedMEs, datTraits, use = "p") #p for pearson correlation coefficient 
-module.trait.Pvalue = corPvalueStudent(module.trait.correlation, nSamples) #calculate the p-value associated with the correlation
-textMatrix = paste(signif(module.trait.correlation, 2), "\n(", signif(module.trait.Pvalue, 1), ")", sep = "")
-dim(textMatrix) = dim(module.trait.correlation)
+#nGenes = ncol(expression.data)
+#nSamples = nrow(expression.data)
+#module.trait.correlation = cor(mergedMEs, datTraits, use = "p") #p for pearson correlation coefficient 
+#module.trait.Pvalue = corPvalueStudent(module.trait.correlation, nSamples) #calculate the p-value associated with the correlation
+#textMatrix = paste(signif(module.trait.correlation, 2), "\n(", signif(module.trait.Pvalue, 1), ")", sep = "")
+#dim(textMatrix) = dim(module.trait.correlation)
 
 # Save the module-trait relationships heatmap
-heatmap_plot_path <- file.path(outdir, "module_trait_relationships_heatmap.png")
-png(heatmap_plot_path, width = 1000, height = 600)
-labeledHeatmap(Matrix = module.trait.correlation, xLabels = names(datTraits), yLabels = names(mergedMEs), ySymbols = names(mergedMEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1), main = paste("Module-trait relationships"))
-dev.off()
+#heatmap_plot_path <- file.path(outdir, "module_trait_relationships_heatmap.png")
+#png(heatmap_plot_path, width = 1000, height = 600)
+#labeledHeatmap(Matrix = module.trait.correlation, xLabels = names(datTraits), yLabels = names(mergedMEs), ySymbols = names(mergedMEs), colorLabels = FALSE, colors = blueWhiteRed(50), textMatrix = textMatrix, setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1), main = paste("Module-trait relationships"))
+#dev.off()
 
 
 if (length(regions) > 1) {
-traitData <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("diagnosis","sex","individual","region","post.mortem.interval..hours.","age"))
+traitData <- pseudobulk@meta.data %>% 
+      dplyr::select(c("diagnosis","sex","region","post.mortem.interval..hours.","age"))
 } else {
-  traitData <- velmeshev_IT@meta.data %>% 
-      dplyr::select(c("diagnosis","sex","individual","post.mortem.interval..hours.","age"))
+  traitData <- pseudobulk@meta.data %>% 
+      dplyr::select(c("diagnosis","sex","post.mortem.interval..hours.","age"))
 }
 
 # Iterate over each module eigengene and perform ANOVA
